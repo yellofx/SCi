@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Maven routes all downloads through the allowlist proxy. -->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
+  <localRepository>/home/dev/.m2/repository</localRepository>
+  <proxies>
+    <proxy>
+      <id>egress-allowlist-http</id>
+      <active>true</active>
+      <protocol>http</protocol>
+      <host>proxy</host>
+      <port>3128</port>
+      <nonProxyHosts>litellm|ollama|localhost|127.0.0.1</nonProxyHosts>
+    </proxy>
+    <proxy>
+      <id>egress-allowlist-https</id>
+      <active>true</active>
+      <protocol>https</protocol>
+      <host>proxy</host>
+      <port>3128</port>
+      <nonProxyHosts>litellm|ollama|localhost|127.0.0.1</nonProxyHosts>
+    </proxy>
+  </proxies>
+</settings>

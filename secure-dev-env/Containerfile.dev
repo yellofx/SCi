@@ -1,0 +1,41 @@
+# Dev container: maximum freedom inside the sandbox.
+# JDK + Maven for Java apps, a remote debugger, sudo/apt, and an
+# open-source coding agent (Aider + OpenCode). The hard boundary is the
+# network (allowlist proxy), not what the agent may run in here.
+FROM docker.io/library/eclipse-temurin:21-jdk
+
+ARG MAVEN_VERSION=3.9.9
+ARG USER=dev
+
+# Base tooling. apt traffic is routed through the proxy at build time too
+# (see scripts/up.sh which passes the proxy build-args), so the allowlist
+# must include the Debian mirrors.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git curl ca-certificates sudo \
+        python3 python3-pip python3-venv \
+        nodejs npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Maven
+RUN curl -fsSL "https://dlcdn.apache.org/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz" \
+      | tar -xz -C /opt \
+    && ln -s /opt/apache-maven-${MAVEN_VERSION}/bin/mvn /usr/local/bin/mvn
+
+# Open-source coding agents (optional, both included; pick one at runtime):
+#   - Aider   : git-native, very data-frugal
+#   - OpenCode: terminal agent, OpenAI-compatible endpoints
+RUN pip3 install --break-system-packages --no-cache-dir aider-install && aider-install || \
+    pip3 install --break-system-packages --no-cache-dir aider-chat
+RUN npm install -g opencode-ai || echo "opencode install skipped (offline build)"
+
+# Non-root user with passwordless sudo (full freedom, contained by the network).
+RUN useradd -m -s /bin/bash ${USER} \
+    && echo "${USER} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER} \
+    && chmod 0440 /etc/sudoers.d/${USER}
+
+# Maven uses the allowlist proxy and the shared cache volume.
+COPY --chown=${USER}:${USER} maven-settings.xml /home/${USER}/.m2/settings.xml
+
+USER ${USER}
+WORKDIR /workspace
+ENV MAVEN_OPTS="-Dmaven.repo.local=/home/${USER}/.m2/repository"

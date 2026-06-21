@@ -1,0 +1,8 @@
+# Secrets — never committed
+.env
+
+# Local model weights
+.ollama/
+
+# Build output — ephemeral, lives only inside the container volume
+sample-app/target/

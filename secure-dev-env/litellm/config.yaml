@@ -1,0 +1,37 @@
+# LiteLLM gateway: ONE OpenAI-compatible API, swappable backends.
+# The coding agent only ever talks to http://litellm:4000 and never needs
+# to know whether the model runs locally or remotely.
+
+model_list:
+  # --- Local, fully sovereign (default) -----------------------------------
+  - model_name: local-coder
+    litellm_params:
+      model: ollama_chat/qwen2.5-coder:7b
+      api_base: http://ollama:11434
+  - model_name: local-coder-large
+    litellm_params:
+      model: ollama_chat/qwen2.5-coder:32b
+      api_base: http://ollama:11434
+
+  # --- Remote (only over the allowlist proxy; add host to squid.conf) ------
+  # Generic OpenAI-compatible sovereign/EU endpoint:
+  - model_name: remote-coder
+    litellm_params:
+      model: openai/your-model
+      api_base: os.environ/REMOTE_API_BASE
+      api_key: os.environ/REMOTE_API_KEY
+
+  # Example: hosted Claude (uncomment + set ANTHROPIC_API_KEY in .env,
+  # and add the inference host to the proxy allowlist):
+  # - model_name: remote-claude
+  #   litellm_params:
+  #     model: anthropic/claude-sonnet-4-6
+  #     api_key: os.environ/ANTHROPIC_API_KEY
+
+litellm_settings:
+  # Drop secrets/PII before they ever reach a model (defence in depth).
+  # turn_off_message_logging: true
+  drop_params: true
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

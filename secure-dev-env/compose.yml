@@ -1,0 +1,100 @@
+# Secure Dev Environment for the public sector
+# Rootless Podman (also works with podman-compose / docker compose).
+#
+# Security model:
+#   - Only the `proxy` service is attached to the external network.
+#   - `dev`, `litellm` and `ollama` live on an INTERNAL network with no NAT
+#     to the outside world. Their only route out is the Squid allowlist proxy.
+#   => The agent has full freedom INSIDE the box, but cannot exfiltrate data
+#      from target/ to arbitrary hosts. Maven/Git/model traffic still works.
+#
+# Start:  ./scripts/up.sh      Enter agent: ./scripts/agent.sh
+
+networks:
+  # No external connectivity. Dev workloads sit here.
+  internal:
+    internal: true
+  # Bridged to the host/internet. ONLY the proxy is allowed here.
+  external: {}
+
+volumes:
+  # Build output stays inside the box: container-internal, ephemeral,
+  # never synced to the host. Regenerable, so it can hold sensitive data
+  # at build time without it ever leaving the sandbox.
+  build-target: {}
+  maven-cache: {}
+
+services:
+  proxy:
+    image: docker.io/library/debian:12-slim
+    command: >
+      bash -c "apt-get update && apt-get install -y squid &&
+               cp /etc/squid/allowlist.conf /etc/squid/squid.conf &&
+               squid -N -f /etc/squid/squid.conf"
+    volumes:
+      - ./proxy/squid.conf:/etc/squid/allowlist.conf:ro,Z
+    networks:
+      - internal
+      - external
+    restart: unless-stopped
+
+  ollama:
+    image: docker.io/ollama/ollama:latest
+    # Local model backend. Pull a coder model after first start, e.g.:
+    #   podman exec -it sde-ollama ollama pull qwen2.5-coder:7b
+    container_name: sde-ollama
+    volumes:
+      - ./.ollama:/root/.ollama:Z
+    networks:
+      - internal
+    # GPU optional; CPU works for small models. Uncomment for NVIDIA:
+    # devices: ["nvidia.com/gpu=all"]
+    restart: unless-stopped
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: sde-litellm
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    env_file: .env
+    environment:
+      # litellm itself only needs the proxy if you route to a REMOTE model.
+      HTTP_PROXY: http://proxy:3128
+      HTTPS_PROXY: http://proxy:3128
+      NO_PROXY: ollama,localhost,127.0.0.1
+    volumes:
+      - ./litellm/config.yaml:/app/config.yaml:ro,Z
+    networks:
+      - internal
+    depends_on: [ollama, proxy]
+    restart: unless-stopped
+
+  dev:
+    build:
+      context: .
+      dockerfile: Containerfile.dev
+    container_name: sde-dev
+    env_file: .env
+    environment:
+      # Everything the agent does goes through the allowlist proxy.
+      HTTP_PROXY: http://proxy:3128
+      HTTPS_PROXY: http://proxy:3128
+      NO_PROXY: litellm,ollama,localhost,127.0.0.1
+      # Coding agent points at the unified OpenAI-compatible gateway.
+      OPENAI_API_BASE: http://litellm:4000
+      OPENAI_BASE_URL: http://litellm:4000
+      OPENAI_API_KEY: ${LITELLM_MASTER_KEY:-sk-local-dummy}
+    volumes:
+      # Code is live-visible to your local IDE.
+      - ./sample-app:/workspace:Z
+      # target/ mounted OVER the bind mount -> stays container-internal.
+      - build-target:/workspace/target
+      - maven-cache:/home/dev/.m2
+    networks:
+      - internal
+    ports:
+      # JDWP remote debug + app port -> attach your local IDE here.
+      - "127.0.0.1:5005:5005"
+      - "127.0.0.1:8080:8080"
+    depends_on: [litellm, proxy]
+    # Keep alive; you exec into it with scripts/agent.sh
+    command: ["sleep", "infinity"]

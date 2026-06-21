@@ -1,0 +1,5 @@
+[
+  { "id": 1, "name": "Erika Mustermann", "city": "Musterstadt", "caseRef": "SYN-0001" },
+  { "id": 2, "name": "Max Mustermann",   "city": "Beispielheim", "caseRef": "SYN-0002" },
+  { "id": 3, "name": "Lieschen Müller",  "city": "Musterstadt", "caseRef": "SYN-0003" }
+]
