@@ -1,6 +1,9 @@
 # Secrets — never committed
 .env
 
+# Host CA bundle copied at build time for this environment
+corp-ca.crt
+
 # Local model weights
 .ollama/
 
